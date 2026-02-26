@@ -1,4 +1,3 @@
-# streamlit_app.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -11,7 +10,9 @@ import plotly.express as px
 from PIL import Image
 import io
 import base64
-from web3 import Web3
+import os
+from dotenv import load_dotenv
+import requests
 import random
 
 # Page configuration
@@ -22,6 +23,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Load environment variables
+load_dotenv()
+
 # Custom CSS
 st.markdown("""
 <style>
@@ -30,6 +34,7 @@ st.markdown("""
         color: #1E88E5;
         text-align: center;
         margin-bottom: 1rem;
+        font-weight: 700;
     }
     .sub-header {
         font-size: 1.5rem;
@@ -38,40 +43,63 @@ st.markdown("""
         margin-bottom: 2rem;
     }
     .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 10px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem;
+        border-radius: 15px;
         text-align: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        color: white;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
     }
     .node-card {
         background-color: white;
-        padding: 1rem;
-        border-radius: 10px;
+        padding: 1.5rem;
+        border-radius: 15px;
         border: 1px solid #e0e0e0;
         margin: 0.5rem 0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        transition: transform 0.3s;
+    }
+    .node-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.15);
     }
     .success-badge {
         background-color: #4CAF50;
         color: white;
-        padding: 0.25rem 0.5rem;
-        border-radius: 5px;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
         font-size: 0.8rem;
+        font-weight: 600;
     }
     .pending-badge {
         background-color: #FFC107;
         color: black;
-        padding: 0.25rem 0.5rem;
-        border-radius: 5px;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
         font-size: 0.8rem;
+        font-weight: 600;
+    }
+    .info-box {
+        background-color: #e3f2fd;
+        padding: 1rem;
+        border-radius: 10px;
+        border-left: 5px solid #2196F3;
+        margin: 1rem 0;
+    }
+    .hash-display {
+        font-family: 'Courier New', monospace;
+        background-color: #f5f5f5;
+        padding: 0.5rem;
+        border-radius: 5px;
+        font-size: 0.9rem;
     }
     .footer {
         text-align: center;
         margin-top: 3rem;
-        padding: 1rem;
-        background-color: #f8f9fa;
-        border-radius: 10px;
+        padding: 2rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 15px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -79,6 +107,7 @@ st.markdown("""
 # Initialize session state
 if 'blockchain' not in st.session_state:
     st.session_state.blockchain = []
+    
 if 'research_nodes' not in st.session_state:
     st.session_state.research_nodes = [
         {
@@ -87,21 +116,23 @@ if 'research_nodes' not in st.session_state:
             "type": "eDNA Sensor",
             "location": "Manaus, Brazil",
             "status": "active",
-            "last_submission": "2024-01-15 14:30:22",
+            "last_submission": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "data_points": 1245,
             "verified": True,
-            "node_address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+            "node_address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+            "stake": "32 ETH"
         },
         {
             "id": "NODE-002",
             "name": "Mars Rover Telemetry",
             "type": "Space Telemetry",
             "location": "Jezero Crater, Mars",
-            "status": "active", 
-            "last_submission": "2024-01-15 15:45:10",
+            "status": "active",
+            "last_submission": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "data_points": 3567,
             "verified": True,
-            "node_address": "0x8aB4F35Cc6634C0532925a3b844Bc454e4438f77a"
+            "node_address": "0x8aB4F35Cc6634C0532925a3b844Bc454e4438f77a",
+            "stake": "48 ETH"
         },
         {
             "id": "NODE-003",
@@ -109,10 +140,11 @@ if 'research_nodes' not in st.session_state:
             "type": "Marine eDNA",
             "location": "Great Barrier Reef",
             "status": "active",
-            "last_submission": "2024-01-15 13:15:33",
+            "last_submission": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "data_points": 892,
             "verified": True,
-            "node_address": "0x9cD4F25Cc6634C0532925a3b844Bc454e4438f88b"
+            "node_address": "0x9cD4F25Cc6634C0532925a3b844Bc454e4438f88b",
+            "stake": "24 ETH"
         },
         {
             "id": "NODE-004",
@@ -120,12 +152,21 @@ if 'research_nodes' not in st.session_state:
             "type": "Environmental Sensor",
             "location": "Svalbard, Norway",
             "status": "pending",
-            "last_submission": "2024-01-14 22:10:45",
+            "last_submission": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "data_points": 456,
             "verified": False,
-            "node_address": "0x3eF5A45Cc6634C0532925a3b844Bc454e4438f99c"
+            "node_address": "0x3eF5A45Cc6634C0532925a3b844Bc454e4438f99c",
+            "stake": "8 ETH"
         }
     ]
+
+# Smart Contract Configuration (simulated)
+CONTRACT_ADDRESS = "0x1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t"
+CONTRACT_ABI = {
+    "anchorData": "function anchorData(bytes32 dataHash, string memory dataType, string memory metadata) public",
+    "verifyData": "function verifyData(bytes32 dataHash) public view returns (bool)",
+    "getNodeInfo": "function getNodeInfo(address nodeAddress) public view returns (string memory, bool)"
+}
 
 # Header section
 st.markdown('<h1 class="main-header">🔬 The "De-Science" Ledger</h1>', unsafe_allow_html=True)
@@ -137,11 +178,17 @@ with st.sidebar:
     st.markdown("## Network Status")
     
     # Network metrics
+    active_nodes = sum(1 for node in st.session_state.research_nodes if node["status"] == "active")
+    total_data_points = sum(node["data_points"] for node in st.session_state.research_nodes)
+    total_stake = sum(float(node["stake"].split()[0]) for node in st.session_state.research_nodes)
+    
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Active Nodes", sum(1 for node in st.session_state.research_nodes if node["status"] == "active"))
+        st.metric("Active Nodes", active_nodes)
     with col2:
-        st.metric("Total Data Points", sum(node["data_points"] for node in st.session_state.research_nodes))
+        st.metric("Total Data Points", total_data_points)
+    
+    st.metric("Total Stake", f"{total_stake} ETH")
     
     st.markdown("---")
     st.markdown("## Quick Actions")
@@ -149,20 +196,21 @@ with st.sidebar:
     if st.button("🔄 Refresh Blockchain"):
         st.rerun()
     
-    if st.button("➕ Add Test Node"):
+    if st.button("➕ Add Test Node", use_container_width=True):
         new_node = {
             "id": f"NODE-{random.randint(100, 999)}",
-            "name": f"New Research Station {random.randint(1, 100)}",
+            "name": f"Research Station {random.randint(1, 100)}",
             "type": random.choice(["eDNA Sensor", "Space Telemetry", "Marine eDNA", "Environmental Sensor"]),
             "location": random.choice(["Antarctica", "Moon Base", "Deep Ocean", "Atacama Desert"]),
             "status": "active",
             "last_submission": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "data_points": random.randint(100, 1000),
             "verified": True,
-            "node_address": f"0x{hashlib.sha256(str(random.random()).encode()).hexdigest()[:40]}"
+            "node_address": f"0x{hashlib.sha256(str(random.random()).encode()).hexdigest()[:40]}",
+            "stake": f"{random.randint(1, 50)} ETH"
         }
         st.session_state.research_nodes.append(new_node)
-        st.success("Test node added!")
+        st.success("✅ Test node added successfully!")
         time.sleep(1)
         st.rerun()
     
@@ -171,12 +219,19 @@ with st.sidebar:
     st.info("""
     **Network:** Sepolia Testnet  
     **Chain ID:** 11155111  
+    **Contract:** `0x1a2b...s0t`  
     **Blocks:** 4,567,890  
-    **Last Block:** 2 sec ago
+    **Gas Price:** 25 Gwei
     """)
 
 # Main content area with tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "🔗 Blockchain Explorer", "📡 Research Nodes", "📊 Data Flow Diagram"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📊 Dashboard", 
+    "🔗 Data Anchoring", 
+    "🔍 Data Verification", 
+    "📡 Research Nodes",
+    "📊 Architecture"
+])
 
 # Tab 1: Dashboard
 with tab1:
@@ -187,25 +242,25 @@ with tab1:
     with col1:
         with st.container():
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.metric("Total Nodes", len(st.session_state.research_nodes))
+            st.metric("Total Nodes", len(st.session_state.research_nodes), delta=2)
             st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
         with st.container():
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.metric("Verified Nodes", sum(1 for node in st.session_state.research_nodes if node["verified"]))
+            st.metric("Verified Nodes", sum(1 for node in st.session_state.research_nodes if node["verified"]), delta=1)
             st.markdown('</div>', unsafe_allow_html=True)
     
     with col3:
         with st.container():
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.metric("Total Transactions", len(st.session_state.blockchain))
+            st.metric("Total Transactions", len(st.session_state.blockchain), delta=5)
             st.markdown('</div>', unsafe_allow_html=True)
     
     with col4:
         with st.container():
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.metric("Data Integrity", "100%")
+            st.metric("Data Integrity", "100%", delta=0)
             st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown("---")
@@ -215,120 +270,222 @@ with tab1:
     
     with col1:
         st.markdown("### Node Distribution by Type")
-        node_types = pd.DataFrame(st.session_state.research_nodes)["type"].value_counts()
-        fig = px.pie(values=node_types.values, names=node_types.index, 
-                     color_discrete_sequence=px.colors.sequential.Blues_r)
+        node_df = pd.DataFrame(st.session_state.research_nodes)
+        node_types = node_df["type"].value_counts().reset_index()
+        node_types.columns = ['Type', 'Count']
+        fig = px.pie(node_types, values='Count', names='Type', 
+                     color_discrete_sequence=px.colors.sequential.Blues_r,
+                     title="Research Node Types")
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-        st.markdown("### Recent Data Submissions")
-        # Simulate recent submissions
-        recent_data = pd.DataFrame({
-            "Time": pd.date_range(end=datetime.now(), periods=10, freq="H"),
-            "Data Points": np.random.randint(10, 100, 10)
-        })
-        fig = px.line(recent_data, x="Time", y="Data Points", 
-                     title="Data Points Over Time")
+        st.markdown("### Stake Distribution")
+        stake_df = pd.DataFrame([
+            {"Node": node["name"][:15] + "...", "Stake": float(node["stake"].split()[0])}
+            for node in st.session_state.research_nodes
+        ])
+        fig = px.bar(stake_df, x='Node', y='Stake', 
+                     title="Node Stake (ETH)",
+                     color='Stake',
+                     color_continuous_scale='Blues')
         st.plotly_chart(fig, use_container_width=True)
     
     # Recent activity
     st.markdown("### Recent Network Activity")
+    
+    # Generate some sample activity
     activity_data = []
     for i in range(5):
+        node = random.choice(st.session_state.research_nodes)
+        tx_hash = hashlib.sha256(f"{random.random()}{time.time()}".encode()).hexdigest()
         activity_data.append({
-            "Time": datetime.now().strftime("%H:%M:%S"),
-            "Node": random.choice(st.session_state.research_nodes)["name"],
+            "Timestamp": (datetime.now() - pd.Timedelta(minutes=i*15)).strftime("%H:%M:%S"),
+            "Node": node["name"],
             "Action": "Data Anchored",
-            "Transaction": f"0x{hashlib.sha256(str(random.random()).encode()).hexdigest()[:16]}..."
+            "Data Type": random.choice(["eDNA", "Telemetry", "Climate", "Marine"]),
+            "Transaction": f"0x{tx_hash[:16]}..."
         })
     
     activity_df = pd.DataFrame(activity_data)
     st.dataframe(activity_df, use_container_width=True)
 
-# Tab 2: Blockchain Explorer
+# Tab 2: Data Anchoring
 with tab2:
-    st.markdown("## Blockchain Explorer")
-    st.markdown("### Smart Contract Interaction")
+    st.markdown("## Anchor Data to Blockchain")
+    st.markdown('<div class="info-box">📝 Upload your research data to create an immutable record on the blockchain. The data hash will be stored permanently.</div>', unsafe_allow_html=True)
     
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.markdown("#### Anchor New Data")
+        st.markdown("### Upload Data File")
         
-        # Form for anchoring data
+        # File upload
+        uploaded_file = st.file_uploader(
+            "Choose a file (CSV, JSON, TXT, or any research data)",
+            type=['csv', 'json', 'txt', 'xlsx', 'pdf', 'jpg', 'png']
+        )
+        
+        if uploaded_file is not None:
+            # Read file and compute hash
+            file_bytes = uploaded_file.getvalue()
+            file_hash = hashlib.sha256(file_bytes).hexdigest()
+            
+            st.markdown("#### File Details:")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.write(f"**Filename:** {uploaded_file.name}")
+                st.write(f"**File size:** {len(file_bytes) / 1024:.2f} KB")
+            with col_b:
+                st.write(f"**File type:** {uploaded_file.type}")
+            
+            st.markdown("#### SHA-256 Hash:")
+            st.code(file_hash, language="text")
+    
+    with col2:
+        st.markdown("### Metadata")
+        
         with st.form("anchor_data_form"):
             node_name = st.selectbox(
                 "Select Research Node",
-                options=[node["name"] for node in st.session_state.research_nodes]
+                options=[node["name"] for node in st.session_state.research_nodes if node["verified"]]
             )
             
             data_type = st.selectbox(
                 "Data Type",
-                ["eDNA Sample", "Telemetry Data", "Environmental Reading", "Sensor Calibration"]
+                ["eDNA Sample", "Telemetry Data", "Environmental Reading", 
+                 "Climate Data", "Marine Sample", "Space Telemetry"]
             )
             
-            data_value = st.text_area("Data Value (JSON format)", 
-                                      value='{"temperature": 25.5, "humidity": 60, "timestamp": "2024-01-15T12:00:00Z"}')
+            location = st.text_input("Location", value="Field Station Alpha")
             
-            submit_button = st.form_submit_button("Anchor to Blockchain")
+            additional_notes = st.text_area("Additional Notes", 
+                                          placeholder="Any additional metadata about this sample...")
             
-            if submit_button:
-                # Create transaction
+            submit_button = st.form_submit_button("🔗 Anchor to Blockchain", use_container_width=True)
+            
+            if submit_button and uploaded_file is not None:
+                # Create blockchain transaction
                 transaction = {
-                    "transaction_hash": f"0x{hashlib.sha256(str(random.random()).encode()).hexdigest()}",
+                    "transaction_hash": f"0x{hashlib.sha256(f'{random.random()}{time.time()}'.encode()).hexdigest()}",
                     "block_number": random.randint(1000000, 2000000),
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "node": node_name,
                     "data_type": data_type,
-                    "data_hash": hashlib.sha256(data_value.encode()).hexdigest(),
-                    "status": "confirmed"
+                    "data_hash": file_hash,
+                    "filename": uploaded_file.name,
+                    "file_size": f"{len(file_bytes) / 1024:.2f} KB",
+                    "location": location,
+                    "metadata": additional_notes,
+                    "status": "confirmed",
+                    "gas_used": f"{random.randint(50000, 150000)}"
                 }
                 
                 st.session_state.blockchain.append(transaction)
-                st.success(f"Data anchored successfully! Transaction: {transaction['transaction_hash'][:20]}...")
+                st.success("✅ Data anchored successfully to Sepolia Testnet!")
                 
                 # Show transaction details
+                st.balloons()
+                st.markdown("#### Transaction Details:")
                 st.json(transaction)
     
+    if uploaded_file is None:
+        st.info("👆 Upload a file to start")
+
+# Tab 3: Data Verification
+with tab3:
+    st.markdown("## Verify Data Integrity")
+    st.markdown('<div class="info-box">🔍 Upload a file to verify that its hash exists on the blockchain, proving it hasn\'t been tampered with.</div>', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### Upload File to Verify")
+        verify_file = st.file_uploader(
+            "Choose a file to verify",
+            type=['csv', 'json', 'txt', 'xlsx', 'pdf', 'jpg', 'png'],
+            key="verify"
+        )
+        
+        if verify_file is not None:
+            # Compute hash of uploaded file
+            verify_bytes = verify_file.getvalue()
+            verify_hash = hashlib.sha256(verify_bytes).hexdigest()
+            
+            st.markdown("#### File Hash:")
+            st.code(verify_hash, language="text")
+            
+            # Check if hash exists in blockchain
+            found = False
+            matching_tx = None
+            for tx in st.session_state.blockchain:
+                if tx["data_hash"] == verify_hash:
+                    found = True
+                    matching_tx = tx
+                    break
+            
+            if found:
+                st.success("✅ **VERIFIED** - This data hash exists on the blockchain!")
+                st.markdown("#### Original Record:")
+                st.json(matching_tx)
+                
+                # Verification badge
+                st.markdown("""
+                <div style="background-color: #4CAF20; color: white; padding: 1rem; border-radius: 10px; text-align: center;">
+                    <h3>✓ Data Integrity Confirmed</h3>
+                    <p>This data has not been tampered with since {}</p>
+                </div>
+                """.format(matching_tx["timestamp"]), unsafe_allow_html=True)
+            else:
+                st.error("❌ **NOT FOUND** - This data hash does not exist on the blockchain!")
+                st.markdown("""
+                <div style="background-color: #f44336; color: white; padding: 1rem; border-radius: 10px; text-align: center;">
+                    <h3>⚠ Data Integrity Alert</h3>
+                    <p>This data has not been anchored to the blockchain or has been modified.</p>
+                </div>
+                """, unsafe_allow_html=True)
+    
     with col2:
-        st.markdown("#### Smart Contract Info")
-        st.info("""
-        **Contract Address:**  
-        `0x1a2b3c4d5e6f7g8h9i0j...`
+        st.markdown("### Search by Transaction")
         
-        **Deployed on:** Sepolia Testnet  
-        **Contract Name:** DataProvenance  
-        **Owner:** 0x742d35Cc6634C0532925...
+        search_type = st.radio("Search by:", ["Transaction Hash", "Data Hash", "Node Address"])
         
-        **Functions:**  
-        • anchorData()  
-        • verifyData()  
-        • getProvenance()
-        """)
+        if search_type == "Transaction Hash":
+            search_term = st.text_input("Enter transaction hash (0x...)")
+        elif search_type == "Data Hash":
+            search_term = st.text_input("Enter data hash (64 characters)")
+        else:
+            search_term = st.text_input("Enter node address (0x...)")
+        
+        if st.button("🔍 Search", use_container_width=True) and search_term:
+            results = []
+            for tx in st.session_state.blockchain:
+                if search_term.lower() in tx.get("transaction_hash", "").lower() or \
+                   search_term.lower() in tx.get("data_hash", "").lower() or \
+                   search_term.lower() in tx.get("node", "").lower():
+                    results.append(tx)
+            
+            if results:
+                st.success(f"Found {len(results)} matching records")
+                for tx in results:
+                    with st.expander(f"Transaction: {tx['transaction_hash'][:20]}..."):
+                        st.json(tx)
+            else:
+                st.warning("No matching records found")
     
+    # Recent verifications
     st.markdown("---")
-    
-    # Blockchain explorer table
-    st.markdown("### Recent Blockchain Transactions")
+    st.markdown("### Recently Verified Data")
     
     if st.session_state.blockchain:
-        explorer_df = pd.DataFrame(st.session_state.blockchain[::-1])  # Reverse to show newest first
-        st.dataframe(explorer_df, use_container_width=True)
-        
-        # Transaction details
-        st.markdown("### Transaction Details")
-        selected_tx = st.selectbox("Select Transaction to View Details", 
-                                   options=[tx["transaction_hash"][:20] + "..." for tx in st.session_state.blockchain])
-        
-        if selected_tx:
-            tx = next(tx for tx in st.session_state.blockchain if selected_tx[:-3] in tx["transaction_hash"])
-            st.json(tx)
+        recent_df = pd.DataFrame(st.session_state.blockchain[-5:][::-1])
+        st.dataframe(recent_df[['timestamp', 'node', 'data_type', 'data_hash']], use_container_width=True)
     else:
-        st.info("No transactions yet. Use the form above to anchor data.")
+        st.info("No data has been anchored yet")
 
-# Tab 3: Research Nodes
-with tab3:
+# Tab 4: Research Nodes
+with tab4:
     st.markdown("## Verified Research Nodes")
+    st.markdown('<div class="info-box">🌐 These are the trusted research nodes authorized to anchor data to the blockchain.</div>', unsafe_allow_html=True)
     
     # Filter options
     col1, col2, col3 = st.columns(3)
@@ -337,9 +494,9 @@ with tab3:
     with col2:
         type_filter = st.selectbox("Filter by Type", ["All"] + list(set(node["type"] for node in st.session_state.research_nodes)))
     with col3:
-        search = st.text_input("Search Node", "")
+        search = st.text_input("Search by name or location", "")
     
-    # Display nodes
+    # Apply filters
     filtered_nodes = st.session_state.research_nodes
     
     if status_filter != "All":
@@ -349,78 +506,137 @@ with tab3:
         filtered_nodes = [node for node in filtered_nodes if node["type"] == type_filter]
     
     if search:
-        filtered_nodes = [node for node in filtered_nodes if search.lower() in node["name"].lower() or search.lower() in node["location"].lower()]
+        filtered_nodes = [node for node in filtered_nodes 
+                         if search.lower() in node["name"].lower() or 
+                         search.lower() in node["location"].lower()]
+    
+    # Display node statistics
+    st.markdown(f"**Showing {len(filtered_nodes)} of {len(st.session_state.research_nodes)} nodes**")
     
     # Display nodes in grid
     cols = st.columns(2)
     for idx, node in enumerate(filtered_nodes):
         with cols[idx % 2]:
             with st.container():
+                status_class = "success-badge" if node["status"] == "active" else "pending-badge"
+                verified_icon = "✅" if node["verified"] else "⏳"
+                
                 st.markdown(f'''
                 <div class="node-card">
-                    <h4>{node["name"]}</h4>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h4>{verified_icon} {node["name"]}</h4>
+                        <span class="{status_class}">{node["status"].upper()}</span>
+                    </div>
                     <p><strong>ID:</strong> {node["id"]}</p>
                     <p><strong>Type:</strong> {node["type"]}</p>
                     <p><strong>Location:</strong> {node["location"]}</p>
-                    <p><strong>Status:</strong> <span class="{'success-badge' if node['status'] == 'active' else 'pending-badge'}">{node["status"]}</span></p>
-                    <p><strong>Last Submission:</strong> {node["last_submission"]}</p>
+                    <p><strong>Node Address:</strong> <span style="font-family: monospace;">{node["node_address"][:10]}...{node["node_address"][-8:]}</span></p>
+                    <p><strong>Stake:</strong> {node["stake"]}</p>
                     <p><strong>Data Points:</strong> {node["data_points"]}</p>
-                    <p><strong>Verified:</strong> {"✅" if node["verified"] else "❌"}</p>
-                    <p><strong>Node Address:</strong> {node["node_address"][:20]}...</p>
+                    <p><strong>Last Submission:</strong> {node["last_submission"]}</p>
                 </div>
                 ''', unsafe_allow_html=True)
                 
-                if st.button(f"View Details", key=f"view_{node['id']}"):
+                if st.button(f"View Node Details", key=f"view_{node['id']}"):
                     st.session_state.selected_node = node
                     st.rerun()
     
     # Node details modal
     if 'selected_node' in st.session_state:
         st.markdown("---")
-        st.markdown(f"### Node Details: {st.session_state.selected_node['name']}")
+        st.markdown(f"### 📊 Node Details: {st.session_state.selected_node['name']}")
+        
+        node = st.session_state.selected_node
         
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("#### Node Information")
-            st.json(st.session_state.selected_node)
+            st.json(node)
         
         with col2:
-            st.markdown("#### Recent Data Submissions")
-            # Simulate recent submissions for this node
-            submissions = []
-            for i in range(5):
-                submissions.append({
-                    "timestamp": (datetime.now() - pd.Timedelta(hours=i)).strftime("%Y-%m-%d %H:%M:%S"),
-                    "data_hash": hashlib.sha256(str(random.random()).encode()).hexdigest()[:20] + "...",
-                    "data_type": random.choice(["eDNA", "Temperature", "Humidity", "Pressure"]),
-                    "block_number": random.randint(1000000, 2000000)
-                })
-            st.dataframe(pd.DataFrame(submissions), use_container_width=True)
+            st.markdown("#### Recent Activity")
+            # Filter transactions for this node
+            node_txs = [tx for tx in st.session_state.blockchain 
+                       if tx["node"] == node["name"]]
+            
+            if node_txs:
+                tx_df = pd.DataFrame(node_txs[-5:])
+                st.dataframe(tx_df[['timestamp', 'data_type', 'data_hash']], use_container_width=True)
+            else:
+                st.info("No recent activity for this node")
         
-        if st.button("Close Details"):
+        if st.button("Close Details", use_container_width=True):
             del st.session_state.selected_node
             st.rerun()
-
-# Tab 4: Data Flow Diagram
-with tab4:
-    st.markdown("## Data Flow: Edge to Chain")
     
-    # Create flow diagram using plotly
+    # Add new node section
+    st.markdown("---")
+    with st.expander("➕ Register New Research Node"):
+        st.markdown("#### Node Registration Form")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            new_node_name = st.text_input("Node Name")
+            new_node_type = st.selectbox("Node Type", 
+                ["eDNA Sensor", "Space Telemetry", "Marine eDNA", "Environmental Sensor"])
+            new_node_location = st.text_input("Location")
+        
+        with col2:
+            new_node_stake = st.number_input("Stake Amount (ETH)", min_value=1, max_value=100, value=10)
+            new_node_address = st.text_input("Node Address (0x...)", 
+                value=f"0x{hashlib.sha256(str(random.random()).encode()).hexdigest()[:40]}")
+        
+        if st.button("Register Node", use_container_width=True):
+            new_node = {
+                "id": f"NODE-{random.randint(100, 999)}",
+                "name": new_node_name,
+                "type": new_node_type,
+                "location": new_node_location,
+                "status": "pending",
+                "last_submission": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "data_points": 0,
+                "verified": False,
+                "node_address": new_node_address,
+                "stake": f"{new_node_stake} ETH"
+            }
+            st.session_state.research_nodes.append(new_node)
+            st.success("Node registered successfully! Pending verification...")
+            time.sleep(1)
+            st.rerun()
+
+# Tab 5: Architecture
+with tab5:
+    st.markdown("## System Architecture")
+    st.markdown("### Data Flow: Edge to Chain")
+    
+    # Create flow diagram
     fig = go.Figure()
     
-    # Add nodes
-    nodes = ["Edge Device\n(Sensor)", "Edge Gateway", "Data Oracle", "Smart Contract", "Blockchain"]
-    x_positions = [0, 1, 2, 3, 4]
-    y_positions = [0, 0, 0, 0, 0]
+    # Add nodes for flow diagram
+    nodes = [
+        "Edge Device\n(Sensor)",
+        "Data Hash\n(SHA-256)",
+        "Verified Node\n(Oracle)",
+        "Smart Contract",
+        "Blockchain\n(Sepolia)"
+    ]
     
-    # Add node markers
+    # Position nodes
+    x_pos = [0, 1, 2, 3, 4]
+    y_pos = [0, 0, 0, 0, 0]
+    
+    # Colors for nodes
+    colors = ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336']
+    
+    # Add nodes
     fig.add_trace(go.Scatter(
-        x=x_positions,
-        y=y_positions,
+        x=x_pos,
+        y=y_pos,
         mode='markers+text',
-        marker=dict(size=40, color=['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336']),
+        marker=dict(size=50, color=colors, line=dict(color='white', width=2)),
         text=nodes,
         textposition="bottom center",
+        textfont=dict(size=12, color='black'),
         hoverinfo='text',
         showlegend=False
     ))
@@ -428,8 +644,8 @@ with tab4:
     # Add arrows
     for i in range(len(nodes)-1):
         fig.add_annotation(
-            x=(x_positions[i] + x_positions[i+1])/2,
-            y=0,
+            x=(x_pos[i] + x_pos[i+1])/2,
+            y=0.1,
             text="→",
             showarrow=False,
             font=dict(size=30, color="gray")
@@ -438,189 +654,141 @@ with tab4:
     fig.update_layout(
         title="Data Provenance Flow",
         showlegend=False,
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-0.5, 4.5]),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-0.5, 1]),
         height=300,
-        margin=dict(l=20, r=20, t=40, b=20)
+        margin=dict(l=20, r=20, t=40, b=40),
+        plot_bgcolor='rgba(0,0,0,0)'
     )
     
     st.plotly_chart(fig, use_container_width=True)
     
-    # Detailed flow description
-    st.markdown("---")
-    st.markdown("### Detailed Flow Description")
-    
+    # Detailed architecture explanation
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("""
-        #### 1. Edge Layer
-        - **eDNA Sensors**: Collect environmental DNA samples
+        #### 🌍 Edge Layer
+        - **eDNA Sensors**: Collect environmental samples
         - **Space Telemetry**: Gather spacecraft data
         - **Environmental Monitors**: Record climate data
         
-        **Data Format:** Raw sensor readings, timestamps, GPS coordinates
+        **Process:**
+        1. Raw data collection
+        2. Local hashing (SHA-256)
+        3. Metadata attachment
         """)
         
         st.markdown("""
-        #### 2. Edge Gateway
-        - Aggregates data from multiple sensors
-        - Performs initial validation
-        - Adds metadata and timestamps
-        - Encrypts sensitive data
-        """)
+        #### 🔄 Oracle Layer
+        - Verified research nodes
+        - Data validation
+        - Transaction signing
         
-        st.markdown("""
-        #### 3. Data Oracle
-        - Verifies data integrity
-        - Creates data hash
-        - Formats for blockchain
-        - Manages node identity
+        **Functions:**
+        - Verify data integrity
+        - Submit to blockchain
+        - Monitor network status
         """)
     
     with col2:
         st.markdown("""
-        #### 4. Smart Contract
-        - **Function:** anchorData()
-        - Records data hash
-        - Stores provenance metadata
-        - Emits events for verification
+        #### ⛓️ Blockchain Layer
+        - **Network:** Sepolia Testnet
+        - **Contract:** DataProvenance.sol
+        - **Storage:** Immutable records
+        
+        **Smart Contract Functions:**
+        - `anchorData()` - Store data hash
+        - `verifyData()` - Check existence
+        - `getNodeInfo()` - Node details
         """)
         
         st.markdown("""
-        #### 5. Blockchain
-        - Permanent immutable record
-        - Timestamped transactions
-        - Publicly verifiable
-        - Decentralized storage
-        """)
+        #### 📊 Dashboard Layer
+        - Real-time monitoring
+        - Data verification
+        - Node management
         
-        st.code("""
-// Smart Contract Pseudocode
-function anchorData(
-    bytes32 dataHash,
-    string memory dataType,
-    uint256 timestamp
-) public {
-    require(isRegisteredNode(msg.sender));
+        **Features:**
+        - Transaction explorer
+        - Hash verification
+        - Node registry
+        """)
     
-    DataProvenance memory provenance = DataProvenance({
-        dataHash: dataHash,
-        submitter: msg.sender,
-        timestamp: block.timestamp,
-        dataType: dataType
-    });
-    
-    provenanceRecords[dataHash] = provenance;
-    emit DataAnchored(dataHash, msg.sender);
-}
-        """, language="solidity")
-    
-    # Technical diagram
+    # Smart Contract Code
     st.markdown("---")
-    st.markdown("### System Architecture")
+    st.markdown("### Smart Contract (Solidity)")
     
-    # Create a more detailed architecture diagram
-    fig2 = go.Figure()
-    
-    # Add components
-    components = {
-        "Sensors": (0, 2, "eDNA\nSensors"),
-        "Gateway": (1, 2, "Edge\nGateway"),
-        "Oracle": (2, 2, "Data\nOracle"),
-        "Contract": (3, 2, "Smart\nContract"),
-        "Chain": (4, 2, "Blockchain"),
-        "Dashboard": (2, 0, "Research\nDashboard")
-    }
-    
-    for name, (x, y, label) in components.items():
-        fig2.add_trace(go.Scatter(
-            x=[x],
-            y=[y],
-            mode='markers+text',
-            marker=dict(size=30, color='lightblue'),
-            text=[label],
-            textposition="middle center",
-            name=name,
-            showlegend=False
-        ))
-    
-    # Add connections
-    connections = [
-        [(0, 2), (1, 2)],
-        [(1, 2), (2, 2)],
-        [(2, 2), (3, 2)],
-        [(3, 2), (4, 2)],
-        [(2, 2), (2, 0)]
-    ]
-    
-    for conn in connections:
-        fig2.add_shape(
-            type="line",
-            x0=conn[0][0], y0=conn[0][1],
-            x1=conn[1][0], y1=conn[1][1],
-            line=dict(color="gray", width=2, dash="dot")
-        )
-    
-    fig2.update_layout(
-        title="De-Science System Architecture",
-        showlegend=False,
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-0.5, 4.5]),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-0.5, 2.5]),
-        height=400,
-        margin=dict(l=20, r=20, t=40, b=20)
-    )
-    
-    st.plotly_chart(fig2, use_container_width=True)
-
-# Footer
-st.markdown("---")
-st.markdown("""
-<div class="footer">
-    <p><strong>De-Science Ledger</strong> - Decentralized Research & Data Integrity System</p>
-    <p>Smart Contract deployed on Sepolia Testnet | Network Status: Operational</p>
-    <p style="font-size: 0.8rem; color: #666;">This is a demonstration interface for hackathon purposes</p>
-</div>
-""", unsafe_allow_html=True)
-
-# Add sample smart contract code in an expander
-with st.expander("📜 View Sample Smart Contract (Solidity)"):
-    st.code('''
+    with st.expander("📜 View DataProvenance.sol"):
+        st.code('''
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+/**
+ * @title DataProvenance
+ * @dev Decentralized research data integrity system
+ */
 contract DataProvenance {
     struct DataRecord {
-        bytes32 dataHash;
-        address submitter;
-        uint256 timestamp;
-        string dataType;
-        string metadata;
-        bool verified;
+        bytes32 dataHash;      // SHA-256 hash of the data
+        uint256 timestamp;      // Block timestamp
+        string dataType;        // Type of data (eDNA, telemetry, etc.)
+        string metadata;        // Additional info (location, sensor ID, etc.)
+        address researcher;     // Node that submitted the data
+        bool verified;          // Verification status
     }
     
     struct ResearchNode {
-        string nodeId;
-        string nodeType;
-        string location;
-        address nodeAddress;
-        bool isActive;
+        string nodeId;          // Unique identifier
+        string nodeType;        // Type of research node
+        string location;        // Physical location
+        address nodeAddress;    // Ethereum address
+        uint256 stake;          // Staked amount for accountability
+        bool isActive;          // Node status
         uint256 registrationTime;
     }
     
+    // Mappings
     mapping(bytes32 => DataRecord) public records;
     mapping(address => ResearchNode) public nodes;
+    mapping(address => bool) public verifiedNodes;
+    
+    // Arrays
     address[] public nodeAddresses;
+    bytes32[] public dataHashes;
     
-    event DataAnchored(bytes32 indexed dataHash, address indexed submitter, uint256 timestamp);
-    event NodeRegistered(address indexed nodeAddress, string nodeId);
+    // Events
+    event DataAnchored(bytes32 indexed dataHash, address indexed researcher, uint256 timestamp, string dataType);
+    event NodeRegistered(address indexed nodeAddress, string nodeId, uint256 stake);
+    event NodeVerified(address indexed nodeAddress, bool status);
     
-    modifier onlyRegisteredNode() {
-        require(nodes[msg.sender].isActive, "Node not registered");
+    // Modifiers
+    modifier onlyVerified() {
+        require(verifiedNodes[msg.sender], "Not a verified node");
         _;
     }
     
-    function registerNode(string memory _nodeId, string memory _nodeType, string memory _location) public {
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
+    
+    address public owner;
+    
+    constructor() {
+        owner = msg.sender;
+    }
+    
+    /**
+     * @dev Register a new research node
+     */
+    function registerNode(
+        string memory _nodeId,
+        string memory _nodeType,
+        string memory _location
+    ) external payable {
+        require(msg.value >= 1 ether, "Minimum stake is 1 ETH");
         require(!nodes[msg.sender].isActive, "Node already registered");
         
         nodes[msg.sender] = ResearchNode({
@@ -628,84 +796,162 @@ contract DataProvenance {
             nodeType: _nodeType,
             location: _location,
             nodeAddress: msg.sender,
+            stake: msg.value,
             isActive: true,
             registrationTime: block.timestamp
         });
         
         nodeAddresses.push(msg.sender);
-        emit NodeRegistered(msg.sender, _nodeId);
+        emit NodeRegistered(msg.sender, _nodeId, msg.value);
     }
     
+    /**
+     * @dev Verify a node (owner only)
+     */
+    function verifyNode(address _nodeAddress, bool _status) external onlyOwner {
+        require(nodes[_nodeAddress].isActive, "Node not registered");
+        verifiedNodes[_nodeAddress] = _status;
+        emit NodeVerified(_nodeAddress, _status);
+    }
+    
+    /**
+     * @dev Anchor data hash to blockchain
+     */
     function anchorData(
         bytes32 _dataHash,
         string memory _dataType,
         string memory _metadata
-    ) public onlyRegisteredNode {
+    ) external onlyVerified {
         require(records[_dataHash].timestamp == 0, "Data already anchored");
         
         records[_dataHash] = DataRecord({
             dataHash: _dataHash,
-            submitter: msg.sender,
             timestamp: block.timestamp,
             dataType: _dataType,
             metadata: _metadata,
+            researcher: msg.sender,
             verified: true
         });
         
-        emit DataAnchored(_dataHash, msg.sender, block.timestamp);
+        dataHashes.push(_dataHash);
+        emit DataAnchored(_dataHash, msg.sender, block.timestamp, _dataType);
     }
     
-    function verifyData(bytes32 _dataHash) public view returns (bool) {
+    /**
+     * @dev Verify if data exists
+     */
+    function verifyData(bytes32 _dataHash) external view returns (bool) {
         return records[_dataHash].timestamp > 0;
     }
     
-    function getProvenance(bytes32 _dataHash) public view returns (
-        address submitter,
+    /**
+     * @dev Get data provenance
+     */
+    function getProvenance(bytes32 _dataHash) external view returns (
+        address researcher,
         uint256 timestamp,
         string memory dataType,
+        string memory metadata,
         bool verified
     ) {
         DataRecord memory record = records[_dataHash];
+        require(record.timestamp > 0, "Data not found");
         return (
-            record.submitter,
+            record.researcher,
             record.timestamp,
             record.dataType,
+            record.metadata,
             record.verified
         );
     }
     
-    function getNodeCount() public view returns (uint256) {
+    /**
+     * @dev Get node information
+     */
+    function getNodeInfo(address _nodeAddress) external view returns (
+        string memory nodeId,
+        string memory nodeType,
+        string memory location,
+        uint256 stake,
+        bool isActive,
+        bool isVerified
+    ) {
+        ResearchNode memory node = nodes[_nodeAddress];
+        require(node.isActive, "Node not found");
+        return (
+            node.nodeId,
+            node.nodeType,
+            node.location,
+            node.stake,
+            node.isActive,
+            verifiedNodes[_nodeAddress]
+        );
+    }
+    
+    /**
+     * @dev Get total records count
+     */
+    function getRecordCount() external view returns (uint256) {
+        return dataHashes.length;
+    }
+    
+    /**
+     * @dev Get node count
+     */
+    function getNodeCount() external view returns (uint256) {
         return nodeAddresses.length;
     }
 }
-    ''', language="solidity")
+        ''', language="solidity")
+    
+    # Deployment Instructions
+    st.markdown("### Deployment Instructions")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+        #### Prerequisites
+        ```bash
+        # Install dependencies
+        npm install -g hardhat
+        npm install @openzeppelin/contracts
+        
+        # Create project
+        mkdir de-science-contract
+        cd de-science-contract
+        npx hardhat init
+        ```
+        """)
+    
+    with col2:
+        st.markdown("""
+        #### Deploy to Sepolia
+        ```bash
+        # Configure hardhat.config.js
+        # Add Sepolia network
+        
+        # Deploy
+        npx hardhat run scripts/deploy.js --network sepolia
+        
+        # Verify
+        npx hardhat verify --network sepolia <CONTRACT_ADDRESS>
+        ```
+        """)
 
-# Add deployment instructions
-with st.expander("🚀 Deployment Instructions"):
-    st.markdown("""
-    ### Deploy to Sepolia Testnet
-    
-    1. **Prerequisites**
-       - Install MetaMask
-       - Get Sepolia ETH from a faucet
-       - Install Hardhat or Remix IDE
-    
-    2. **Deployment Steps**
-    ```bash
-    # Using Hardhat
-    npx hardhat run scripts/deploy.js --network sepolia
-    ```
-    
-    3. **Verify Contract**
-    ```bash
-    npx hardhat verify --network sepolia DEPLOYED_CONTRACT_ADDRESS
-    ```
-    
-    4. **Update Streamlit App**
-    - Replace contract address in the app
-    - Update ABI if needed
-    - Configure Web3 provider
-    """)
-
-# Add a note about running the app
-st.sidebar.markdown("---")
+# Footer
+st.markdown("---")
+st.markdown(f'''
+<div class="footer">
+    <h3>🔬 De-Science Ledger</h3>
+    <p>Decentralized Research & Data Integrity System</p>
+    <p style="font-size: 0.9rem; margin-top: 1rem;">
+        <strong>Smart Contract:</strong> {CONTRACT_ADDRESS[:10]}...{CONTRACT_ADDRESS[-8:]} on Sepolia Testnet<br>
+        <strong>Network Status:</strong> 🟢 Operational<br>
+        <strong>Total Nodes:</strong> {len(st.session_state.research_nodes)} | 
+        <strong>Total Records:</strong> {len(st.session_state.blockchain)}
+    </p>
+    <p style="font-size: 0.8rem; margin-top: 1rem;">
+        Built for Hackathon | Data Provenance Solution | MIT License
+    </p>
+</div>
+''', unsafe_allow_html=True)
