@@ -101,6 +101,12 @@ st.markdown("""
         color: white;
         border-radius: 15px;
     }
+    .stButton > button {
+        width: 100%;
+        border-radius: 10px;
+        height: 3rem;
+        font-weight: 600;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -124,7 +130,7 @@ if 'research_nodes' not in st.session_state:
         },
         {
             "id": "NODE-002",
-            "name": "Mars Rover Telemetry",
+            "name": "Mars Rover Telemetry", 
             "type": "Space Telemetry",
             "location": "Jezero Crater, Mars",
             "status": "active",
@@ -137,7 +143,7 @@ if 'research_nodes' not in st.session_state:
         {
             "id": "NODE-003",
             "name": "Pacific Ocean eDNA Array",
-            "type": "Marine eDNA",
+            "type": "Marine eDNA", 
             "location": "Great Barrier Reef",
             "status": "active",
             "last_submission": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -162,11 +168,15 @@ if 'research_nodes' not in st.session_state:
 
 # Smart Contract Configuration (simulated)
 CONTRACT_ADDRESS = "0x1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t"
-CONTRACT_ABI = {
-    "anchorData": "function anchorData(bytes32 dataHash, string memory dataType, string memory metadata) public",
-    "verifyData": "function verifyData(bytes32 dataHash) public view returns (bool)",
-    "getNodeInfo": "function getNodeInfo(address nodeAddress) public view returns (string memory, bool)"
-}
+
+# Helper function to safely extract stake value
+def get_stake_value(stake_str):
+    try:
+        if stake_str and isinstance(stake_str, str):
+            return float(stake_str.split()[0])
+        return 0
+    except (ValueError, IndexError, AttributeError):
+        return 0
 
 # Header section
 st.markdown('<h1 class="main-header">🔬 The "De-Science" Ledger</h1>', unsafe_allow_html=True)
@@ -177,10 +187,15 @@ with st.sidebar:
     st.image("https://via.placeholder.com/300x100/1E88E5/ffffff?text=De-Science+Ledger", use_column_width=True)
     st.markdown("## Network Status")
     
-    # Network metrics
-    active_nodes = sum(1 for node in st.session_state.research_nodes if node["status"] == "active")
-    total_data_points = sum(node["data_points"] for node in st.session_state.research_nodes)
-    total_stake = sum(float(node["stake"].split()[0]) for node in st.session_state.research_nodes)
+    # Network metrics with error handling
+    active_nodes = sum(1 for node in st.session_state.research_nodes if node.get("status") == "active")
+    total_data_points = sum(node.get("data_points", 0) for node in st.session_state.research_nodes)
+    
+    # Fixed: Safe stake calculation
+    total_stake = 0
+    for node in st.session_state.research_nodes:
+        stake_value = get_stake_value(node.get("stake", "0 ETH"))
+        total_stake += stake_value
     
     col1, col2 = st.columns(2)
     with col1:
@@ -188,7 +203,7 @@ with st.sidebar:
     with col2:
         st.metric("Total Data Points", total_data_points)
     
-    st.metric("Total Stake", f"{total_stake} ETH")
+    st.metric("Total Stake", f"{total_stake:.1f} ETH")
     
     st.markdown("---")
     st.markdown("## Quick Actions")
@@ -248,7 +263,8 @@ with tab1:
     with col2:
         with st.container():
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.metric("Verified Nodes", sum(1 for node in st.session_state.research_nodes if node["verified"]), delta=1)
+            verified_count = sum(1 for node in st.session_state.research_nodes if node.get("verified", False))
+            st.metric("Verified Nodes", verified_count, delta=1)
             st.markdown('</div>', unsafe_allow_html=True)
     
     with col3:
@@ -271,43 +287,58 @@ with tab1:
     with col1:
         st.markdown("### Node Distribution by Type")
         node_df = pd.DataFrame(st.session_state.research_nodes)
-        node_types = node_df["type"].value_counts().reset_index()
-        node_types.columns = ['Type', 'Count']
-        fig = px.pie(node_types, values='Count', names='Type', 
-                     color_discrete_sequence=px.colors.sequential.Blues_r,
-                     title="Research Node Types")
-        st.plotly_chart(fig, use_container_width=True)
+        if not node_df.empty and 'type' in node_df.columns:
+            node_types = node_df["type"].value_counts().reset_index()
+            node_types.columns = ['Type', 'Count']
+            fig = px.pie(node_types, values='Count', names='Type', 
+                         color_discrete_sequence=px.colors.sequential.Blues_r,
+                         title="Research Node Types")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No node data available")
     
     with col2:
         st.markdown("### Stake Distribution")
-        stake_df = pd.DataFrame([
-            {"Node": node["name"][:15] + "...", "Stake": float(node["stake"].split()[0])}
-            for node in st.session_state.research_nodes
-        ])
-        fig = px.bar(stake_df, x='Node', y='Stake', 
-                     title="Node Stake (ETH)",
-                     color='Stake',
-                     color_continuous_scale='Blues')
-        st.plotly_chart(fig, use_container_width=True)
+        stake_data = []
+        for node in st.session_state.research_nodes:
+            stake_value = get_stake_value(node.get("stake", "0 ETH"))
+            if stake_value > 0:
+                stake_data.append({
+                    "Node": node.get("name", "Unknown")[:15] + "...",
+                    "Stake": stake_value
+                })
+        
+        if stake_data:
+            stake_df = pd.DataFrame(stake_data)
+            fig = px.bar(stake_df, x='Node', y='Stake', 
+                         title="Node Stake (ETH)",
+                         color='Stake',
+                         color_continuous_scale='Blues')
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No stake data available")
     
     # Recent activity
     st.markdown("### Recent Network Activity")
     
     # Generate some sample activity
     activity_data = []
-    for i in range(5):
+    for i in range(min(5, len(st.session_state.research_nodes))):
         node = random.choice(st.session_state.research_nodes)
         tx_hash = hashlib.sha256(f"{random.random()}{time.time()}".encode()).hexdigest()
         activity_data.append({
             "Timestamp": (datetime.now() - pd.Timedelta(minutes=i*15)).strftime("%H:%M:%S"),
-            "Node": node["name"],
+            "Node": node.get("name", "Unknown"),
             "Action": "Data Anchored",
             "Data Type": random.choice(["eDNA", "Telemetry", "Climate", "Marine"]),
             "Transaction": f"0x{tx_hash[:16]}..."
         })
     
-    activity_df = pd.DataFrame(activity_data)
-    st.dataframe(activity_df, use_container_width=True)
+    if activity_data:
+        activity_df = pd.DataFrame(activity_data)
+        st.dataframe(activity_df, use_container_width=True)
+    else:
+        st.info("No recent activity")
 
 # Tab 2: Data Anchoring
 with tab2:
@@ -345,9 +376,13 @@ with tab2:
         st.markdown("### Metadata")
         
         with st.form("anchor_data_form"):
+            verified_nodes = [node["name"] for node in st.session_state.research_nodes if node.get("verified", False)]
+            if not verified_nodes:
+                verified_nodes = [node["name"] for node in st.session_state.research_nodes]
+            
             node_name = st.selectbox(
                 "Select Research Node",
-                options=[node["name"] for node in st.session_state.research_nodes if node["verified"]]
+                options=verified_nodes
             )
             
             data_type = st.selectbox(
@@ -387,6 +422,8 @@ with tab2:
                 st.balloons()
                 st.markdown("#### Transaction Details:")
                 st.json(transaction)
+            elif submit_button and uploaded_file is None:
+                st.error("Please upload a file first")
     
     if uploaded_file is None:
         st.info("👆 Upload a file to start")
@@ -418,7 +455,7 @@ with tab3:
             found = False
             matching_tx = None
             for tx in st.session_state.blockchain:
-                if tx["data_hash"] == verify_hash:
+                if tx.get("data_hash") == verify_hash:
                     found = True
                     matching_tx = tx
                     break
@@ -429,12 +466,12 @@ with tab3:
                 st.json(matching_tx)
                 
                 # Verification badge
-                st.markdown("""
-                <div style="background-color: #4CAF20; color: white; padding: 1rem; border-radius: 10px; text-align: center;">
+                st.markdown(f"""
+                <div style="background-color: #4CAF50; color: white; padding: 1rem; border-radius: 10px; text-align: center;">
                     <h3>✓ Data Integrity Confirmed</h3>
-                    <p>This data has not been tampered with since {}</p>
+                    <p>This data has not been tampered with since {matching_tx.get('timestamp', 'Unknown')}</p>
                 </div>
-                """.format(matching_tx["timestamp"]), unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
             else:
                 st.error("❌ **NOT FOUND** - This data hash does not exist on the blockchain!")
                 st.markdown("""
@@ -467,7 +504,7 @@ with tab3:
             if results:
                 st.success(f"Found {len(results)} matching records")
                 for tx in results:
-                    with st.expander(f"Transaction: {tx['transaction_hash'][:20]}..."):
+                    with st.expander(f"Transaction: {tx.get('transaction_hash', 'Unknown')[:20]}..."):
                         st.json(tx)
             else:
                 st.warning("No matching records found")
@@ -477,8 +514,15 @@ with tab3:
     st.markdown("### Recently Verified Data")
     
     if st.session_state.blockchain:
-        recent_df = pd.DataFrame(st.session_state.blockchain[-5:][::-1])
-        st.dataframe(recent_df[['timestamp', 'node', 'data_type', 'data_hash']], use_container_width=True)
+        recent_txs = st.session_state.blockchain[-5:][::-1]
+        recent_df = pd.DataFrame([
+            {"timestamp": tx.get("timestamp", ""), 
+             "node": tx.get("node", ""), 
+             "data_type": tx.get("data_type", ""), 
+             "data_hash": tx.get("data_hash", "")[:20] + "..."}
+            for tx in recent_txs
+        ])
+        st.dataframe(recent_df, use_container_width=True)
     else:
         st.info("No data has been anchored yet")
 
@@ -492,7 +536,8 @@ with tab4:
     with col1:
         status_filter = st.selectbox("Filter by Status", ["All", "active", "pending"])
     with col2:
-        type_filter = st.selectbox("Filter by Type", ["All"] + list(set(node["type"] for node in st.session_state.research_nodes)))
+        all_types = list(set(node.get("type", "Unknown") for node in st.session_state.research_nodes))
+        type_filter = st.selectbox("Filter by Type", ["All"] + all_types)
     with col3:
         search = st.text_input("Search by name or location", "")
     
@@ -500,15 +545,15 @@ with tab4:
     filtered_nodes = st.session_state.research_nodes
     
     if status_filter != "All":
-        filtered_nodes = [node for node in filtered_nodes if node["status"] == status_filter]
+        filtered_nodes = [node for node in filtered_nodes if node.get("status") == status_filter]
     
     if type_filter != "All":
-        filtered_nodes = [node for node in filtered_nodes if node["type"] == type_filter]
+        filtered_nodes = [node for node in filtered_nodes if node.get("type") == type_filter]
     
     if search:
         filtered_nodes = [node for node in filtered_nodes 
-                         if search.lower() in node["name"].lower() or 
-                         search.lower() in node["location"].lower()]
+                         if search.lower() in node.get("name", "").lower() or 
+                         search.lower() in node.get("location", "").lower()]
     
     # Display node statistics
     st.markdown(f"**Showing {len(filtered_nodes)} of {len(st.session_state.research_nodes)} nodes**")
@@ -518,35 +563,36 @@ with tab4:
     for idx, node in enumerate(filtered_nodes):
         with cols[idx % 2]:
             with st.container():
-                status_class = "success-badge" if node["status"] == "active" else "pending-badge"
-                verified_icon = "✅" if node["verified"] else "⏳"
+                status = node.get("status", "unknown")
+                verified = node.get("verified", False)
+                status_class = "success-badge" if status == "active" else "pending-badge"
+                verified_icon = "✅" if verified else "⏳"
                 
                 st.markdown(f'''
                 <div class="node-card">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <h4>{verified_icon} {node["name"]}</h4>
-                        <span class="{status_class}">{node["status"].upper()}</span>
+                        <h4>{verified_icon} {node.get("name", "Unknown")}</h4>
+                        <span class="{status_class}">{status.upper()}</span>
                     </div>
-                    <p><strong>ID:</strong> {node["id"]}</p>
-                    <p><strong>Type:</strong> {node["type"]}</p>
-                    <p><strong>Location:</strong> {node["location"]}</p>
-                    <p><strong>Node Address:</strong> <span style="font-family: monospace;">{node["node_address"][:10]}...{node["node_address"][-8:]}</span></p>
-                    <p><strong>Stake:</strong> {node["stake"]}</p>
-                    <p><strong>Data Points:</strong> {node["data_points"]}</p>
-                    <p><strong>Last Submission:</strong> {node["last_submission"]}</p>
+                    <p><strong>ID:</strong> {node.get("id", "N/A")}</p>
+                    <p><strong>Type:</strong> {node.get("type", "N/A")}</p>
+                    <p><strong>Location:</strong> {node.get("location", "N/A")}</p>
+                    <p><strong>Node Address:</strong> <span style="font-family: monospace;">{node.get("node_address", "Unknown")[:10]}...{node.get("node_address", "Unknown")[-8:]}</span></p>
+                    <p><strong>Stake:</strong> {node.get("stake", "0 ETH")}</p>
+                    <p><strong>Data Points:</strong> {node.get("data_points", 0)}</p>
+                    <p><strong>Last Submission:</strong> {node.get("last_submission", "Never")}</p>
                 </div>
                 ''', unsafe_allow_html=True)
                 
-                if st.button(f"View Node Details", key=f"view_{node['id']}"):
+                if st.button(f"View Node Details", key=f"view_{node.get('id', idx)}"):
                     st.session_state.selected_node = node
                     st.rerun()
     
     # Node details modal
     if 'selected_node' in st.session_state:
         st.markdown("---")
-        st.markdown(f"### 📊 Node Details: {st.session_state.selected_node['name']}")
-        
         node = st.session_state.selected_node
+        st.markdown(f"### 📊 Node Details: {node.get('name', 'Unknown')}")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -557,11 +603,19 @@ with tab4:
             st.markdown("#### Recent Activity")
             # Filter transactions for this node
             node_txs = [tx for tx in st.session_state.blockchain 
-                       if tx["node"] == node["name"]]
+                       if tx.get("node") == node.get("name")]
             
             if node_txs:
-                tx_df = pd.DataFrame(node_txs[-5:])
-                st.dataframe(tx_df[['timestamp', 'data_type', 'data_hash']], use_container_width=True)
+                recent_txs = node_txs[-5:]
+                tx_data = []
+                for tx in recent_txs:
+                    tx_data.append({
+                        "timestamp": tx.get("timestamp", ""),
+                        "data_type": tx.get("data_type", ""),
+                        "data_hash": tx.get("data_hash", "")[:20] + "..."
+                    })
+                tx_df = pd.DataFrame(tx_data)
+                st.dataframe(tx_df, use_container_width=True)
             else:
                 st.info("No recent activity for this node")
         
