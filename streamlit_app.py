@@ -1005,7 +1005,7 @@ st.markdown(f'''
         <strong>Total Records:</strong> {len(st.session_state.blockchain)}
     </p>
     <p style="font-size: 0.8rem; margin-top: 1rem;">
-        Built for Hackathon | Data Provenance Solution | MIT License
+        G H Raisoni College of Engineering & Management, Jalgaon
     </p>
 </div>
 ''', unsafe_allow_html=True)
