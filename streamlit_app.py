@@ -114,7 +114,90 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state for authentication
+# ===== FUNCTION DEFINITIONS (MOVE TO TOP) =====
+# Password hashing function
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+# Validate email format
+def is_valid_email(email):
+    pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
+    return re.match(pattern, email) is not None
+
+# Validate password strength
+def is_strong_password(password):
+    if len(password) < 8:
+        return False
+    if not re.search(r'[A-Z]', password):
+        return False
+    if not re.search(r'[a-z]', password):
+        return False
+    if not re.search(r'\d', password):
+        return False
+    return True
+
+# Authentication functions
+def authenticate_user(username, password):
+    if username in st.session_state.users_db:
+        if st.session_state.users_db[username]["password"] == hash_password(password):
+            # Update last login
+            st.session_state.users_db[username]["last_login"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            return True
+    return False
+
+def register_user(username, password, name, email, role, institution):
+    if username in st.session_state.users_db:
+        return False, "Username already exists"
+    
+    if not is_valid_email(email):
+        return False, "Invalid email format"
+    
+    if not is_strong_password(password):
+        return False, "Password must be at least 8 characters with uppercase, lowercase, and numbers"
+    
+    # Add to registration requests (pending approval)
+    request = {
+        "username": username,
+        "password": hash_password(password),
+        "name": name,
+        "email": email,
+        "role": role,
+        "institution": institution,
+        "verified": False,
+        "request_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "pending"
+    }
+    st.session_state.registration_requests.append(request)
+    return True, "Registration submitted for approval"
+
+# Get user role badge
+def get_role_badge(role):
+    badges = {
+        "researcher": "🔬 Researcher",
+        "validator": "✅ Validator",
+        "auditor": "📋 Auditor",
+        "admin": "⚙️ Admin"
+    }
+    return badges.get(role, role)
+
+# Logout function
+def logout():
+    st.session_state.authenticated = False
+    st.session_state.current_user = None
+    st.session_state.user_role = None
+    st.session_state.login_time = None
+    st.rerun()
+
+# Helper function to safely extract stake value
+def get_stake_value(stake_str):
+    try:
+        if stake_str and isinstance(stake_str, str):
+            return float(stake_str.split()[0])
+        return 0
+    except (ValueError, IndexError, AttributeError):
+        return 0
+
+# ===== INITIALIZE SESSION STATE =====
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'current_user' not in st.session_state:
@@ -123,8 +206,10 @@ if 'user_role' not in st.session_state:
     st.session_state.user_role = None
 if 'login_time' not in st.session_state:
     st.session_state.login_time = None
+if 'show_register' not in st.session_state:
+    st.session_state.show_register = False
 
-# Initialize users database (simulated)
+# Initialize users database (simulated) - NOW FUNCTIONS ARE DEFINED
 if 'users_db' not in st.session_state:
     st.session_state.users_db = {
         # Default users with different roles
@@ -134,7 +219,6 @@ if 'users_db' not in st.session_state:
             "email": "sarah.chen@research.org",
             "role": "researcher",
             "institution": "Stanford University",
-            "node_id": "NODE-001",
             "verified": True,
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "last_login": None
@@ -180,6 +264,63 @@ if 'users_db' not in st.session_state:
             "last_login": None
         }
     }
+
+# Initialize registration requests (for new user signups)
+if 'registration_requests' not in st.session_state:
+    st.session_state.registration_requests = []
+
+# Initialize blockchain and research nodes
+if 'blockchain' not in st.session_state:
+    st.session_state.blockchain = []
+    
+if 'research_nodes' not in st.session_state:
+    st.session_state.research_nodes = [
+        {
+            "id": "NODE-001",
+            "name": "Amazon Rainforest eDNA Station",
+            "type": "eDNA Sensor",
+            "location": "Manaus, Brazil",
+            "status": "active",
+            "last_submission": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "data_points": 1245,
+            "verified": True,
+            "node_address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+            "stake": "32 ETH",
+            "owner": "researcher1"
+        },
+        {
+            "id": "NODE-002",
+            "name": "Mars Rover Telemetry", 
+            "type": "Space Telemetry",
+            "location": "Jezero Crater, Mars",
+            "status": "active",
+            "last_submission": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "data_points": 3567,
+            "verified": True,
+            "node_address": "0x8aB4F35Cc6634C0532925a3b844Bc454e4438f77a",
+            "stake": "48 ETH",
+            "owner": "researcher1"
+        },
+        {
+            "id": "NODE-003",
+            "name": "Pacific Ocean eDNA Array",
+            "type": "Marine eDNA", 
+            "location": "Great Barrier Reef",
+            "status": "active",
+            "last_submission": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "data_points": 892,
+            "verified": True,
+            "node_address": "0x9cD4F25Cc6634C0532925a3b844Bc454e4438f88b",
+            "stake": "24 ETH",
+            "owner": "researcher1"
+        }
+    ]
+
+# Smart Contract Configuration
+CONTRACT_ADDRESS = "0x1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t"
+
+# The rest of your code (login_page, register_page, main_app functions, etc.) remains exactly the same...
+
 
 # Initialize registration requests (for new user signups)
 if 'registration_requests' not in st.session_state:
