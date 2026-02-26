@@ -709,5 +709,3 @@ with st.expander("🚀 Deployment Instructions"):
 
 # Add a note about running the app
 st.sidebar.markdown("---")
-st.sidebar.markdown("""
-### 📱 Run this app
