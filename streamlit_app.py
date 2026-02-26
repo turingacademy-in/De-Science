@@ -711,5 +711,3 @@ with st.expander("🚀 Deployment Instructions"):
 st.sidebar.markdown("---")
 st.sidebar.markdown("""
 ### 📱 Run this app
-```bash
-streamlit run streamlit_app.py
